@@ -1,0 +1,64 @@
+name: 抓取免费节点并发送邮件
+
+on:
+  schedule:
+    # 每天北京时间 8:00（UTC 0:00）运行
+    - cron: '0 0 * * *'
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  fetch-and-send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 抓取免费节点
+        run: |
+          echo "=== 开始抓取 $(date -u +'%Y-%m-%d %H:%M:%S UTC') ===" > nodes.txt
+          
+          # Clash 节点
+          echo -e "\n\n===== Clash YAML =====\n" >> nodes.txt
+          if curl -sL --connect-timeout 20 --max-time 60 --retry 2 \
+            "https://raw.githubusercontent.com/yy1588133/proxy-pool/main/clash.yaml" \
+            >> nodes.txt; then
+            echo "Clash 抓取成功" >> nodes.txt
+          else
+            echo "Clash 抓取失败" >> nodes.txt
+          fi
+          
+          # V2Ray 节点
+          echo -e "\n\n===== V2Ray Base64 =====\n" >> nodes.txt
+          if curl -sL --connect-timeout 20 --max-time 60 --retry 2 \
+            "https://raw.githubusercontent.com/yy1588133/proxy-pool/main/v2ray.txt" \
+            >> nodes.txt; then
+            echo "V2Ray 抓取成功" >> nodes.txt
+          else
+            echo "V2Ray 抓取失败" >> nodes.txt
+          fi
+          
+          # 可继续添加更多源
+          # echo -e "\n\n===== 其他源 =====\n" >> nodes.txt
+          # curl -sL --connect-timeout 20 --max-time 60 \
+          #   "https://raw.githubusercontent.com/xxx/xxx/main/xxx.yaml" >> nodes.txt || true
+          
+          echo -e "\n\n抓取完成时间: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> nodes.txt
+          echo "文件行数: $(wc -l < nodes.txt)" >> nodes.txt
+          ls -lh nodes.txt
+
+      - name: 发送邮件
+        uses: dawidd6/action-send-mail@v4
+        with:
+          server_address: smtp.163.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: 今日免费节点更新 - ${{ github.run_number }}
+          body: |
+            今日免费节点已抓取完成，详见附件 nodes.txt。
+            运行编号: ${{ github.run_number }}
+            时间: ${{ github.run_id }}
+          to: hhz12321@163.com
+          from: 免费节点机器人 <${{ secrets.MAIL_USERNAME }}>
+          attachments: nodes.txt
